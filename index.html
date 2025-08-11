@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive CGPA Calculator</title>
+  <style>
+    :root {
+      --bg: #0f1724;
+      --muted: #9aa4b2;
+      --accent: #3b82f6;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: Inter, system-ui, Segoe UI, Roboto, Arial;
+    }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #071029, #07182a);
+      color: #e6eef6;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+    }
+    .container {
+      width: 100%;
+      max-width: 1000px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.6);
+    }
+    h1 { margin: 0 0 6px; font-size: 20px; }
+    p.lead { margin: 0 0 18px; color: var(--muted); }
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    button {
+      background: var(--accent);
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+    button.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.06); }
+    .semester { margin-bottom: 20px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; }
+    .semester-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .subject-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    th, td { padding: 6px 8px; text-align: left; }
+    thead th { font-size: 13px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,0.04); }
+    tbody tr { border-bottom: 1px dashed rgba(255,255,255,0.03); }
+    input[type=text], input[type=number], select {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 6px 8px;
+      border-radius: 6px;
+      color: inherit;
+      width: 100%;
+    }
+    .result { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .card { background: rgba(255,255,255,0.02); padding: 12px 14px; border-radius: 8px; }
+    .small { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Interactive CGPA Calculator</h1>
+    <p class="lead">Add semesters and subjects. Enter credits and grades to calculate CGPA instantly.</p>
+
+    <div class="controls">
+      <button id="addSemester">+ Add Semester</button>
+      <button id="reset" class="ghost">Reset</button>
+    </div>
+
+    <div id="semesters"></div>
+
+    <div class="result">
+      <div class="card">
+        <div style="font-size:18px" id="cgpa">CGPA: —</div>
+        <div class="small">Total Credits: <span id="totalCredits">0</span></div>
+      </div>
+      <div class="card">
+        <div style="font-size:16px" id="percent">Percentage (approx): —</div>
+        <div class="small">Formula used: CGPA × 9.5</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const semestersDiv = document.getElementById('semesters');
+    const addSemesterBtn = document.getElementById('addSemester');
+    const resetBtn = document.getElementById('reset');
+    const cgpaEl = document.getElementById('cgpa');
+    const totalCreditsEl = document.getElementById('totalCredits');
+    const percentEl = document.getElementById('percent');
+
+    const gradeMap = {
+      'O': 10, 'A+': 9, 'A': 8, 'B+': 7,
+      'B': 6, 'C': 5, 'P': 4, 'F': 0
+    };
+
+    function createSemester(index) {
+      const semester = document.createElement('div');
+      semester.className = 'semester';
+      semester.innerHTML = `
+        <div class="semester-header">
+          <input type="text" value="Semester ${index}" style="font-weight:bold; font-size:16px; background:transparent; border:none; color:inherit;" />
+          <div>
+            <button class="addSubject">+ Add Subject</button>
+            <button class="removeSemester ghost">✕ Remove</button>
+          </div>
+        </div>
+        <table class="subject-table">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th style="width:100px">Credits</th>
+              <th style="width:120px">Grade</th>
+              <th style="width:40px"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      `;
+      semestersDiv.appendChild(semester);
+
+      const tbody = semester.querySelector('tbody');
+      const addSubjectBtn = semester.querySelector('.addSubject');
+      const removeSemesterBtn = semester.querySelector('.removeSemester');
+
+      addSubjectBtn.addEventListener('click', () => addSubjectRow(tbody));
+      removeSemesterBtn.addEventListener('click', () => { semester.remove(); calculate(); });
+
+      addSubjectRow(tbody); // add first subject by default
+    }
+
+    function addSubjectRow(tbody) {
+      const tr = document.createElement('tr');
+      const gradeOptions = Object.keys(gradeMap).map(g => `<option value="${g}">${g}</option>`).join('');
+      tr.innerHTML = `
+        <td><input type="text" placeholder="Subject name"></td>
+        <td><input type="number" min="0" step="1" class="credits"></td>
+        <td>
+          <select class="grade">
+            <option value="">Select</option>
+            ${gradeOptions}
+          </select>
+        </td>
+        <td><button class="del">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      tr.querySelector('.del').addEventListener('click', () => { tr.remove(); calculate(); });
+      tr.querySelectorAll('input, select').forEach(el => {
+        el.addEventListener('input', calculate);
+        el.addEventListener('change', calculate);
+      });
+
+      calculate();
+    }
+
+    function calculate() {
+      let totalCredits = 0;
+      let weightedSum = 0;
+      let invalid = false;
+
+      document.querySelectorAll('.subject-table tbody tr').forEach(tr => {
+        const credits = parseFloat(tr.querySelector('.credits')?.value);
+        const grade = tr.querySelector('.grade')?.value;
+        const sgpa = gradeMap[grade];
+
+        if (Number.isFinite(credits) && grade in gradeMap) {
+          if (credits < 0) invalid = true;
+          totalCredits += credits;
+          weightedSum += credits * sgpa;
+        } else if (tr.querySelector('.credits').value === '' && grade === '') {
+          // ignore empty rows
+        } else {
+          invalid = true;
+        }
+      });
+
+      if (invalid || totalCredits === 0) {
+        cgpaEl.textContent = 'CGPA: —';
+        totalCreditsEl.textContent = '0';
+        percentEl.textContent = 'Percentage (approx): —';
+        return;
+      }
+
+      const cgpa = weightedSum / totalCredits;
+      cgpaEl.textContent = `CGPA: ${cgpa.toFixed(2)}`;
+      totalCreditsEl.textContent = totalCredits;
+      percentEl.textContent = `Percentage (approx): ${(cgpa * 9.5).toFixed(2)}%`;
+    }
+
+    addSemesterBtn.addEventListener('click', () => {
+      createSemester(semestersDiv.children.length + 1);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      semestersDiv.innerHTML = '';
+      cgpaEl.textContent = 'CGPA: —';
+      totalCreditsEl.textContent = '0';
+      percentEl.textContent = 'Percentage (approx): —';
+    });
+
+    // Create first semester on load
+    createSemester(1);
+  </script>
+</body>
+</html>
